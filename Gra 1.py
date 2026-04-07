@@ -77,31 +77,32 @@ class Pocisk:
 class Bazooka:
     sprite_left = wyrzutnia
     sprite_right=pygame.transform.flip(sprite_left, True, False)
-    rotation_offset = pygame.math.Vector2(50, 70)
+    rotation_offset = pygame.math.Vector2(0, sprite_left.get_height()//4)  # 5. przesuwa punkt obrotu ze środka sprita na uchwyt bazooki
     
     def __init__(self):
         self.sprite = Bazooka.sprite_right
         self.rotation_offset = Bazooka.rotation_offset
     
-    def aktualizacja_współrzędnych(self, x, y, kierunek_gracza):
-        self.pos_x = x
-        self.pos_y = y
-        if kierunek_gracza=="left":
-            self.sprite=Bazooka.sprite_left
+    def aktualizacja_współrzędnych(self, player_x, player_y, player_head_dir):
+    # 1. poprawna aktualizacja współrzędnych bazooki z wykorzystaniem pozycji i wielkości sprita gracza
+        if player_head_dir == "left":
+            self.sprite = Bazooka.sprite_left
+            self.pos_x = player_x + SZEROKOSC_GRACZA*4/6
         else:
-            self.sprite=Bazooka.sprite_right
-    def oś_obrotu(self, offset:list, screen:pygame.Surface):
-        x = self.pos_x + offset[0]
-        y = self.pos_y + offset[1]
-        center = (x, y)
+            self.sprite = Bazooka.sprite_right
+            self.pos_x = player_x + SZEROKOSC_GRACZA*2/6
+        self.pos_y = player_y + WYSOKOSC_GRACZA*4/6
+        
+    def oś_obrotu(self, screen:pygame.Surface):
+        # 2. oś obrotu nie powinna pozwalać na przesunięcia
+        center = (self.pos_x, self.pos_y)
         pygame.draw.circle(screen, "red", center, 4)
     
     def draw(self, screen:pygame.Surface):
-        pos_x = self.pos_x
-        pos_y = self.pos_y
-        
+        pos_x = self.pos_x - self.rotation_offset.x  # 3. musimy ODEJMOWAĆ wektor obrotu
+        pos_y = self.pos_y - self.rotation_offset.y  # aby obrót był wokół uchwytu bazooki
         screen.blit(self.sprite, (pos_x - self.sprite.get_width()//2, pos_y - self.sprite.get_height()//2 ))
-        self.oś_obrotu([50, 70], screen)
+        self.oś_obrotu(screen)
     
     def rotate (self, pozycja_myszki):
         odleglosc = pygame.math.Vector2(pozycja_myszki)-(self.pos_x,self.pos_y)
@@ -110,7 +111,7 @@ class Bazooka:
         if self.sprite == Bazooka.sprite_left:
             kat=kat-90
         self.sprite = pygame.transform.rotate(self.sprite, kat)
-        self.rotation_offset = Bazooka.rotation_offset.rotate(kat)
+        self.rotation_offset = Bazooka.rotation_offset.rotate(-kat)  # 6. -kat usuwa latanie bazooki i zaczepia punkt obrotu na uchwycie
 
 
 pos_ziemia = WYSOKOSC/10*7
@@ -124,7 +125,7 @@ clock=pygame.time.Clock()
 run_game = True
 while run_game:
     screen.fill("black")
-    screen.blit(background)
+    screen.blit(background, (0, 0))  # u mnie nie działa bez podania punktu zaczepienia tła
     # dest: RectLike = (0, 0)
     # destination powinno być zmienną typu RectLike
     # RectLike = (liczba, liczba)
@@ -153,7 +154,7 @@ while run_game:
     else:
         gracz.spadanie()
     
-    bazoka.aktualizacja_współrzędnych(gracz.pos_x, gracz.pos_y+30, gracz.kierunek)
+    bazoka.aktualizacja_współrzędnych(gracz.pos_x, gracz.pos_y, gracz.kierunek)  # 4. nic nie dodajemy do pozycji gracza!
     
     pozycja_myszki = pygame.mouse.get_pos()  # (x, y)
     bazoka.rotate(pozycja_myszki)
