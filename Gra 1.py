@@ -1,4 +1,7 @@
 import pygame
+from copy import copy
+import math
+
 FPS=60
 SZEROKOSC=1536
 WYSOKOSC=1024
@@ -64,10 +67,11 @@ class Gracz:
 
 class Pocisk:
     sprite = pilka
+    half_sprite_size = pygame.math.Vector2(sprite.get_width()//2, sprite.get_height()//2)
     
-    def __init__(self, x, y, zadawane_hp, pozycja_myszki):
-        self.pos = pygame.math.Vector2(x, y)
-        pomocniczy_vektor = pygame.math.Vector2(pozycja_myszki)
+    def __init__(self, pos, zadawane_hp, pozycja_myszki):
+        self.pos = pos - Pocisk.half_sprite_size
+        pomocniczy_vektor = pygame.math.Vector2(pozycja_myszki) - self.half_sprite_size
         self.kierunek = pomocniczy_vektor - self.pos
         self.hp = zadawane_hp
         self.speed = 10
@@ -80,50 +84,64 @@ class Pocisk:
 class Bazooka:
     sprite_left = wyrzutnia
     sprite_right=pygame.transform.flip(sprite_left, True, False)
-    rotation_offset = pygame.math.Vector2(0, sprite_left.get_height()//4)  
+    rotation_point_offset = pygame.math.Vector2(0, sprite_left.get_height()//4)
+    wektor_lufy = pygame.math.Vector2(-sprite_left.get_width()//2, -sprite_left.get_height()//4)
     
-    def __init__(self):
+    def __init__(self, player_x, player_y):
+        self.pos = pygame.math.Vector2(player_x + SZEROKOSC_GRACZA*2/6, player_y + WYSOKOSC_GRACZA*4/6)
         self.sprite = Bazooka.sprite_right
-        self.rotation_offset = Bazooka.rotation_offset
+        self.rotation_offset = Bazooka.rotation_point_offset
+        self.sprite_version = "right"
+        self.current_angle = 0
+        self.pozycja_lufy = pygame.math.Vector2(0, 0)
     
     def aktualizacja_współrzędnych(self, player_x, player_y, player_head_dir):
-    
         if player_head_dir == "left":
+            self.sprite_version = "left"
             self.sprite = Bazooka.sprite_left
-            self.pos_x = player_x + SZEROKOSC_GRACZA*4/6
+            self.pos.x = player_x + SZEROKOSC_GRACZA*4/6
         else:
+            self.sprite_version = "right"
             self.sprite = Bazooka.sprite_right
-            self.pos_x = player_x + SZEROKOSC_GRACZA*2/6
-        self.pos_y = player_y + WYSOKOSC_GRACZA*4/6
-        
+            self.pos.x = player_x + SZEROKOSC_GRACZA*2/6
+        self.pos.y = player_y + WYSOKOSC_GRACZA*4/6
+    
     def oś_obrotu(self, screen:pygame.Surface):
-        
-        center = (self.pos_x, self.pos_y)
+        center = self.pos
         pygame.draw.circle(screen, "red", center, 4)
+        pygame.draw.circle(screen, "blue", self.pozycja_lufy, 5)
     
     def draw(self, screen:pygame.Surface):
-        pos_x = self.pos_x - self.rotation_offset.x  
-        pos_y = self.pos_y - self.rotation_offset.y  
-        screen.blit(self.sprite, (pos_x - self.sprite.get_width()//2, pos_y - self.sprite.get_height()//2 ))
+        sprite_rect = self.sprite.get_rect(center=self.pos - self.rotation_offset)
+        screen.blit(self.sprite, sprite_rect.topleft)
         self.oś_obrotu(screen)
     
     def rotate (self, pozycja_myszki):
-        odleglosc = pygame.math.Vector2(pozycja_myszki)-(self.pos_x,self.pos_y)
-        wektor_osi_x = pygame.math.Vector2(1, 0)
-        kat = odleglosc.angle_to(wektor_osi_x) - 42
-        if self.sprite == Bazooka.sprite_left:
-            kat=kat-90
-        self.sprite = pygame.transform.rotate(self.sprite, kat)
-        self.rotation_offset = Bazooka.rotation_offset.rotate(-kat) 
-    def get_lufa (self):
-        wektor_pozycji = pygame.math.Vector2(self.pos_x, self.pos_y)
-        wektor_lufa = wektor_pozycji + self.rotation_offset
+        wektor_myszy = pygame.math.Vector2(pozycja_myszki)
+        odleglosc = wektor_myszy - self.pos
+
+        wektor_lufy = copy(Bazooka.wektor_lufy)
+        if self.sprite_version == "left":
+            wektor_lufy.y = -wektor_lufy.y
+        
+        kat_myszki = odleglosc.angle_to(-wektor_lufy) - 80
+
+        self.pozycja_lufy = self.pos + wektor_lufy.rotate(-self.current_angle + 90)
+
+        # kat_myszki = math.degrees(math.atan2(-odleglosc.y, odleglosc.x))
+        if self.sprite_version == "left":
+            self.current_angle = kat_myszki - 20
+        else:
+            self.current_angle = kat_myszki
+
+        self.rotation_offset = Bazooka.rotation_point_offset.rotate(-self.current_angle)
+        self.sprite = pygame.transform.rotate(self.sprite, self.current_angle)
 
 
-pos_ziemia = WYSOKOSC/10*7
+pos_ziemia = WYSOKOSC/10*4
 
 gracz = Gracz(100)
-bazoka = Bazooka()
+bazoka = Bazooka(gracz.pos_x, gracz.pos_y)
 pocisk = None
 burki = []
 
@@ -134,15 +152,6 @@ while run_game:
     screen.fill("black")
     screen.blit(background, (0, 0))  
     
-    event_list = pygame.event.get()
-    for event in event_list:
-        if event.type==pygame.QUIT:
-            run_game=False
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1:
-                click_pos = pygame.mouse.get_pos()
-                pocisk = Pocisk(bazoka.pos_x, bazoka.pos_y, 10, click_pos)
-        
     keyboard = pygame.key.get_pressed()
     if keyboard[pygame.K_RIGHT] or keyboard[pygame.K_d]:
         gracz.move_right()
@@ -155,10 +164,20 @@ while run_game:
     else:
         gracz.spadanie()
     
-    bazoka.aktualizacja_współrzędnych(gracz.pos_x, gracz.pos_y, gracz.kierunek)  
+    bazoka.aktualizacja_współrzędnych(gracz.pos_x, gracz.pos_y, gracz.kierunek)
     
     pozycja_myszki = pygame.mouse.get_pos()  
     bazoka.rotate(pozycja_myszki)
+    
+    event_list = pygame.event.get()
+    for event in event_list:
+        if event.type==pygame.QUIT:
+            run_game=False
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                click_pos = pygame.mouse.get_pos()
+                pocisk = Pocisk(bazoka.pozycja_lufy, 10, click_pos)
+    
     
     gracz.draw(screen)
     bazoka.draw(screen)
